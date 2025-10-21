@@ -12,6 +12,7 @@
 #include "ksud.h"
 #include "kernel_compat.h"
 
+#if 0
 static DEFINE_MUTEX(ksu_rp_sucompat_lock);
 
 // struct filename *getname_flags(const char __user *filename, int flags, int *empty)
@@ -104,4 +105,63 @@ void rp_sucompat_init()
 	pr_info("%s: register getname_flags!\n", __func__);
 	getname_rp = init_kretprobe("getname_flags", getname_flags_entry_handler,
 			getname_flags_ret_handler, sizeof(int), 20);
+}
+
+#endif
+
+extern int ksu_getname_flags_user(const char __user **filename_user, int flags);
+
+// getname_flags(const char __user *filename, int flags, int *empty);
+
+static int getname_flags_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	const char __user **filename_user = (const char __user **)&PT_REGS_PARM1(real_regs);
+	int flags = (int)PT_REGS_PARM2(real_regs);
+
+	return ksu_getname_flags_user(&filename, flags);
+
+};
+
+static struct kprobe *getname_flags_kp;
+
+// copied from upstream
+static struct kprobe *init_kprobe(const char *name,
+				  kprobe_pre_handler_t handler)
+{
+	struct kprobe *kp = kzalloc(sizeof(struct kprobe), GFP_KERNEL);
+	if (!kp)
+		return NULL;
+	kp->symbol_name = name;
+	kp->pre_handler = handler;
+
+	int ret = register_kprobe(kp);
+	pr_info("sucompat: register_%s kprobe: %d\n", name, ret);
+	if (ret) {
+		kfree(kp);
+		return NULL;
+	}
+
+	return kp;
+}
+static void destroy_kprobe(struct kprobe **kp_ptr)
+{
+	struct kprobe *kp = *kp_ptr;
+	if (!kp)
+		return;
+	unregister_kprobe(kp);
+	synchronize_rcu();
+	kfree(kp);
+	*kp_ptr = NULL;
+}
+
+void rp_sucompat_exit()
+{
+	pr_info("kp_sucompat: unregister getname_flags!\n");
+	destroy_kretprobe(&getname_flags_kp);
+}
+
+void rp_sucompat_init()
+{
+	pr_info("%s: register getname_flags!\n", __func__);
+	getname_flags_kp = init_kprobe("getname_flags", getname_flags_handler_pre);
 }
