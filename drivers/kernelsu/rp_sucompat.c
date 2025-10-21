@@ -115,11 +115,10 @@ extern int ksu_getname_flags_user(const char __user **filename_user, int flags);
 
 static int getname_flags_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user **filename_user = (const char __user **)&PT_REGS_PARM1(real_regs);
-	int flags = (int)PT_REGS_PARM2(real_regs);
+	const char __user **filename_user = (const char __user **)&PT_REGS_PARM1(regs);
+	int flags = (int)PT_REGS_PARM2(regs);
 
-	return ksu_getname_flags_user(&filename, flags);
-
+	return ksu_getname_flags_user(filename_user, flags);
 };
 
 static struct kprobe *getname_flags_kp;
@@ -157,7 +156,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 void rp_sucompat_exit()
 {
 	pr_info("kp_sucompat: unregister getname_flags!\n");
-	destroy_kretprobe(&getname_flags_kp);
+	destroy_kprobe(&getname_flags_kp);
 }
 
 void rp_sucompat_init()
